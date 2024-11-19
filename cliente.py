@@ -16,6 +16,7 @@ uri_objetoPyro = daemon.register(cliente_obj)
 ns.register(cliente_obj.getName(), uri_objetoPyro)
 print(f"Objeto {cliente_obj.getName()} registrado com URI: {uri_objetoPyro}")
 
-
+# liderURI = ns.lookup("Lider_Epoca1")
+# print(liderURI)
 lider = Pyro5.api.Proxy(ns.lookup("Lider_Epoca1"))
-print(lider.teste())
+print(lider.getLog())
