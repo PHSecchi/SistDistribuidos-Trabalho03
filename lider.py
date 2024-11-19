@@ -1,3 +1,5 @@
+#python -m Pyro5.nameserver
+
 import Pyro5.api
 
 class Lider:
@@ -32,11 +34,12 @@ class Lider:
     def getLog (self):
         return self.logs
     
-    def newPubli(self,msg):
-        self.registerLog(msg)
+    # def newPubli(self,msg):
+        # self.registerLog(msg)
 
     def infoNewVot_Obs(self,info):
         self.listClient.append(info)
+        print(info)
     
 
 ns = Pyro5.api.locate_ns()
@@ -44,6 +47,6 @@ daemon = Pyro5.api.Daemon()
 
 lider= Lider('Lider_Epoca1',daemon, ns)
 
-lider.registerLog()
+lider.registerLog('teste')
 
 daemon.requestLoop()
