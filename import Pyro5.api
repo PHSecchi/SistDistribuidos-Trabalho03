@@ -14,37 +14,45 @@ class Cliente:
     def getName(self):
         return self.name
     
-    def register(self,daemon, ns):
+    def register(self, daemon, ns):
         self.uri = daemon.register(self)
         ns.register(self.name, self.uri)
         print(f"Objeto {self.name} registrado com URI: {self.uri}")
     
-    def getLider(self,ns):
-        print(type(ns.lookup("Lider_Epoca1")))
-        self.lider = Pyro5.api.Proxy(ns.lookup("Lider_Epoca1"))
-        self.lider._pyroBind()
-        print(f'Lider encontrado')
-       #print("Métodos expostos:", self.lider._pyroMethods)
-
+    def getLider(self, ns):
+        try:
+            lider_uri = ns.lookup("Lider_Epoca1")
+            print(type(lider_uri))
+            self.lider = Pyro5.api.Proxy(lider_uri)
+            self.lider._pyroBind()
+            print(f"Líder encontrado: {lider_uri}")
+        except Pyro5.errors.CommunicationError as e:
+            print(f"Erro ao conectar ao líder: {e}")
+    
     def infoLider(self):
         info = {
             'cliente': self.name,
             'type': 1,
-            'uri' : self.uri
+            'uri': self.uri
         }
-        self.lider.infoNewVot_Obs(info)
-        print("deposi")
+        try:
+            self.lider.infoNewVot_Obs(info)
+            print("Informações do líder enviadas.")
+        except Pyro5.errors.CommunicationError as e:
+            print(f"Erro ao enviar informações para o líder: {e}")
     
     @Pyro5.api.expose
     @Pyro5.api.oneway
     def reciveNotification(self, notification):
-       print(f"Notificação recebida: {notification}")
+        print(f"Notificação recebida: {notification}")
     
 def main():
     ns = Pyro5.api.locate_ns()
     daemon = Pyro5.api.Daemon()
-    
-    cliente1 = Cliente(f'Cliente_{ns.count()}',daemon, ns)
+
+    # Criar cliente
+    cliente1 = Cliente(f'Cliente_{ns.count()}', daemon, ns)
+
     # Rodar o daemon em uma thread separada
     threading.Thread(target=daemon.requestLoop, daemon=True).start()
     print("Daemon rodando em segundo plano...")
@@ -56,6 +64,6 @@ def main():
             daemon.shutdown()
             print("Encerrando o programa.")
             break
-    
+
 if __name__ == "__main__":
     main()
