@@ -1,4 +1,5 @@
 import Pyro4
+import time
 
 def connectToLeader():
 
@@ -12,18 +13,15 @@ def connectToLeader():
 def main():
     brokerLeader = connectToLeader()
 
+    print("Consumidor conectado ao líder. Aguardando dados confirmados...")
+
     while True:
-        msg = input("Insira a mensagem (ou 'sair' para sair): ")
-        if msg.lower() == "sair":
-            break
-        print("Publicando...")
-        success = brokerLeader.newPublication(msg)
-        if success:
-            print(f"Mensagem '{msg}' publicada com sucesso!")
-        else:
-            print(f"Erroao publicar mensagem.")
+        committedLogs = brokerLeader.getCommittedLogs()
+        print("Dados confirmados consumidos:")
+        for entry in committedLogs:
+            print(f" - {entry['msg']} (epoca: {entry['epoca']}, offset: {entry['offset']})")
+        time.sleep(10)
 
 
 if __name__ == "__main__":
     main()
-
