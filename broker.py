@@ -8,7 +8,7 @@ import threading
 @Pyro4.expose
 class Broker:
     
-    def __init__(self, name, Mode): 
+    def __init__(self, name, mode): 
         self.name = name
         self.mode = mode  # 1:líder, 2:votante e 3:observador
         self.epoca = 1
@@ -36,15 +36,15 @@ class Broker:
     def register(self,daemon, ns):
         self.uri = daemon.register(self)
         if self.mode == 1:
-            ns.register("Líder-Epoca1", self.uri)
-            print(f"Líder registrado como 'Líder-Epoca1' com a URI: {self.uri}.")
+            ns.register("Lider-Epoca1", self.uri)
+            print(f"Líder registrado como 'Lider-Epoca1' com a URI: {self.uri}.")
         else:
             ns.register(self.name, self.uri)
             print(f"Broker {self.name} registrado com a URI: {self.uri}")
 
     def getLeader(self):
         try:
-            self.leader = Pyro4.Proxy("PYRONAME:Líder-Epoca1")
+            self.leader = Pyro4.Proxy("PYRONAME:Lider-Epoca1")
             print(f"Líder encontrado!")
         except Exception as e:
             print(f"Erro ao conectar ao líder: {e}")
@@ -57,32 +57,32 @@ class Broker:
         if mode == 2:
             self.voters[brokerName] = proxy
             self.heartbeats[brokerName] = time.time() 
-            print(f"Líder {self.name}: Votante {brokerName} registrado.")
+            print(f"Votante {brokerName} registrado.")
         else:
             self.observers.append(proxy)
-            print(f"Líder {self.name}: Observador {brokerName} registrado.")
+            print(f"Observador {brokerName} registrado.")
 
     #Recebe publicação do publicador
     def newPublication(self,msg):
 
-        newLog = {"epoca": self.epoca, "offset": len(self.logs), "msg": msg, "commited": False}
+        newLog = {"epoca": self.epoca, "offset": len(self.logs), "msg": msg, "committed": False}
         self.logs.append(newLog)
-        print(f"Líder {self.name}: Nova mensagem adicionada ao log: {newLog}")
+        print(f"Nova mensagem adicionada ao log: {newLog}")
 
         # Notifica votantes
         voters = list(self.voters.values())
         confirmations = [] 
 
         for proxy in voters:
-            def notify_voter(voter):
+            def notifyVoter(voter):
                 try:
                     voter.replicateLog(len(self.logs)- 1)
                     confirmations.append(True)
                 except Exception as e:
-                    print(f"Líder {self.name}: Erro ao notificar votante: {e}")
+                    print(f"Erro ao notificar votante: {e}")
                     confirmations.append(False)
             
-            threading.Thread(target=notify_voter, args=(proxy,)).start()
+            threading.Thread(target=notifyVoter, args=(proxy,)).start()
 
         # Aguarda as confirmações
         while len(confirmations) < len(voters):
@@ -90,7 +90,7 @@ class Broker:
 
         # Verifica se a quantidade mínima confirmou o recebimento 
         if confirmations.count(True) >= (len(self.voters) // 2) + 1:
-            self.logs[-1]['commited'] = True
+            self.logs[-1]['committed'] = True
             print(f"Mensagem commitada pelo quórum!")
             return True
         else:
@@ -103,35 +103,19 @@ class Broker:
             infoToReplicate = self.leader.getLogs(offset)
             if infoToReplicate:
                 self.logs.append(infoToReplicate)
-                print(f"Votante {self.name}: Dados replicados do líder: {infoToReplicate}")
+                print(f"Dados replicados do líder: {infoToReplicate}")
                 
-                self.leader.confirmReplication(self.name, offset)
         except Exception as e:
-            print(f"Votante {self.name}: Erro ao replicar log: {e}")
-
+            print(f"Erro ao replicar log: {e}")
 
     def getLogs(self,offset):
         return self.logs[offset]
 
-    #Recebe a confirmação de replicação dos votantes
-    def confirmReplication(self, voterName, offset):
-        print(f"{voterName}: confimo recebimento do log {offset}.")
-        self.confirmations.setdefault(offset, set()).add(voterName)
-
-        if len(self.confirmations[offset]) >= (len(self.voters) // 2) + 1:
-            self.logs[offset]['commited'] = True
-            print(f"Offset {offset} confirmado!")
-
     #Gera logs commitados para envio para o consumidor
     def getCommittedLogs(self):
-        committedLogs = [entry for entry in self.logs if entry["commited"]]
+        committedLogs = [log for log in self.logs if log["committed"]]
         print(f"Enviando logs para consumidor: {committedLogs}")
         return committedLogs
-
-    #Recebe publicação do publicador
-    def receivePublication(self,publication):
-        print(f"Publicação recebida: {publication}")
-        self.registerLog(publication)
 
     #metodo para envio do heartbeat pelo votante
     def heartbeat(self):
@@ -149,6 +133,7 @@ class Broker:
             for voterName in list(self.heartbeats):
                 if time.time() - self.heartbeats[voterName] > self.heartbeatTime * 2:
                     self.heartbeats.pop(voterName, None)
+                    self.voters.pop(voterName, None)
                     print(f"{voterName}: Não está respondendo.")
                     self.promoteObserver()
             time.sleep(self.heartbeatTime)
@@ -158,16 +143,14 @@ class Broker:
         self.heartbeats[voterName] = time.time()
         print(f"{voterName}: heartbeat recebido.")
 
-
     def synchronizelogs(self,logs):
         self.logs = logs
-    
 
     def promoteObserver(self):
         if self.observers:
             newVoter = self.observers.pop(0)
             newVoterName = f"Votante{len(self.voters) + 1}"
-            self.voters[newVoterName ] = newVoter
+            self.voters[newVoterName] = newVoter
             self.heartbeats[newVoterName] = time.time()
 
             print(f"Observador promovido a votante: {newVoterName}")
@@ -195,7 +178,7 @@ def startBroker(brokerName, mode):
         broker.getLeader()
         try:
             broker.leader.infoLeader(brokerName, mode, broker.uri)
-            print(f"{brokerName} registrado como '{mode}'e conectado.")
+            print(f"{brokerName} registrado como '{broker.getMode(mode)}'e conectado.")
             
             if mode == 2:
                 threading.Thread(target=broker.heartbeat, daemon=True).start()

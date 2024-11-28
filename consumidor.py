@@ -5,7 +5,7 @@ def connectToLeader():
 
     try:
         print("Conectando-se ao líder...")
-        return Pyro4.Proxy("PYRONAME:Líder-Epoca1")
+        return Pyro4.Proxy("PYRONAME:Lider-Epoca1")
     except Exception as e:
         print(f"Erro ao conectar-se com o lider: {e}")
         return None
@@ -20,7 +20,7 @@ def main():
         print("Dados confirmados consumidos:")
         for entry in committedLogs:
             print(f" - {entry['msg']} (epoca: {entry['epoca']}, offset: {entry['offset']})")
-        time.sleep(10)
+        time.sleep(15)
 
 
 if __name__ == "__main__":

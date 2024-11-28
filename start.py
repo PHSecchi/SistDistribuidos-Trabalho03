@@ -11,7 +11,7 @@ instances_to_run = [
     ("Votante1", 2),
     ("Votante2", 2),
     ("Votante3", 2),
-    ("Observador", 3),
+    ("Observador", 3)
 ]
 
 startMultipleInstances("broker.py", instances_to_run)
