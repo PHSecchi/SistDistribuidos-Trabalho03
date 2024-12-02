@@ -1,3 +1,9 @@
+# Falta:
+# - Separar uncomited de commited (tipo em duas filas)
+# - Se o número de votantes for inferior ao mínimo do quórum promove um observador - aqui o líder conta e o cliente tem que solicitar a faixa de logs 'offset' desde o último commited (Novo votante tem que solicitar os dados do líder, não o líder enviar)
+# - Votantes tem que saber quantos votantes tem
+
+
 import subprocess
 
 def startMultipleInstances(executable, instances):
