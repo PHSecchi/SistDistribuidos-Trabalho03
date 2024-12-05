@@ -12,15 +12,16 @@ class Broker:
         self.name = name
         self.mode = mode  # 1:líder, 2:votante e 3:observador
         self.epoca = 1
-        self.logs = []  
-        self.leader = None 
         self.voters = {}  
-        self.observers = []  
-        self.confirmations = {}  
         self.heartbeatTime = 5
+        self.uncommittedLogs = []
+        self.committedLogs = [] 
 
         if self.mode == 1:
             self.heartbeats = {}  
+            self.confirmations = {}  
+            self.observers = []  
+
         print(f"Broker {name} inicializado como {self.getMode(mode)}.")
 
     def getMode(self,mode):
@@ -58,15 +59,28 @@ class Broker:
             self.voters[brokerName] = proxy
             self.heartbeats[brokerName] = time.time() 
             print(f"Votante {brokerName} registrado.")
+            threading.Thread(target=self.infoUpdateVoter).start()
         else:
             self.observers.append(proxy)
             print(f"Observador {brokerName} registrado.")
 
+    def infoUpdateVoter(self):
+        voters = list(self.voters.values())
+        for proxy in voters:
+            proxy.requestVoters()
+        
+    def requestVoters(self):
+        self.voters = self.leader.getVoters()
+        print(f"Lista de votantes atualizado: {self.voters}")
+    
+    def getVoters(self):
+        return self.voters
+
     #Recebe publicação do publicador
     def newPublication(self,msg):
 
-        newLog = {"epoca": self.epoca, "offset": len(self.logs), "msg": msg, "committed": False}
-        self.logs.append(newLog)
+        newLog = {"epoca": self.epoca, "offset": len(self.uncommittedLogs), "msg": msg}
+        self.uncommittedLogs.append(newLog)
         print(f"Nova mensagem adicionada ao log: {newLog}")
 
         # Notifica votantes
@@ -76,7 +90,7 @@ class Broker:
         for proxy in voters:
             def notifyVoter(voter):
                 try:
-                    voter.replicateLog(len(self.logs)- 1)
+                    voter.replicateLog(newLog["offset"])
                     confirmations.append(True)
                 except Exception as e:
                     print(f"Erro ao notificar votante: {e}")
@@ -90,29 +104,54 @@ class Broker:
 
         # Verifica se a quantidade mínima confirmou o recebimento 
         if confirmations.count(True) >= (len(self.voters) // 2) + 1:
-            self.logs[-1]['committed'] = True
             print(f"Mensagem commitada pelo quórum!")
+            self.commitLog(newLog["offset"])
+            voters = list(self.voters.values())
+            for proxy in voters:
+                proxy.commitLog(newLog["offset"])
             return True
         else:
-            print(f"Falha ao atingir o número minimo de confirmação.")
+            self.discardLog(newLog["offset"])
+            voters = list(self.voters.values())
+            for proxy in voters:
+                proxy.discardLog(newLog["offset"])
+            print(f"Falha ao atingir o número minimo de confirmações.")
             return False
 
     # Busca o log e envia confirmação para o lider
     def replicateLog(self, offset):
+        '''if self.uncommittedLogs():
+            maxOffset = -1
+        else:
+            maxOffset = max(log["offset"] for log in self.uncommittedLogs)
+        if offset <= maxOffset:
+            self.uncommittedLogs = [log for log in self.uncommittedLogs if log["offset"] < offset]'''
         try:
-            infoToReplicate = self.leader.getLogs(offset)
+            infoToReplicate = self.leader.getUncommittedLogs(offset)
             if infoToReplicate:
-                self.logs.append(infoToReplicate)
+                self.uncommittedLogs.extend(infoToReplicate)
                 print(f"Dados replicados do líder: {infoToReplicate}")
                 
         except Exception as e:
             print(f"Erro ao replicar log: {e}")
+    
+    def commitLog(self, offset):
+        self.committedLogs.append(self.uncommittedLogs[offset])
+        print(f"Log commitado: {self.uncommittedLogs[offset]}")
+    
+    def discardLog(self, offset):
+        discard = self.uncommittedLogs[offset]
+        self.uncommittedLogs = [log for log in self.uncommittedLogs if log["offset"] != offset]
+        print(f"Log descartado: {discard}")
 
-    def getLogs(self,offset):
-        return self.logs[offset]
+    def getUncommittedLogs(self,offset):
+        return [log for log in self.uncommittedLogs if log["offset"] >= offset]
+
+    def getCommittedLogs(self,offset):
+        return [log for log in self.committedLogs if log["offset"] >= offset]
 
     #Gera logs commitados para envio para o consumidor
-    def getCommittedLogs(self):
+    def getLogsForConsumer(self):
         committedLogs = [log for log in self.logs if log["committed"]]
         print(f"Enviando logs para consumidor: {committedLogs}")
         return committedLogs
@@ -129,13 +168,18 @@ class Broker:
 
     #Verifica se votante se desconectou
     def checkHeartbeat(self):
-        while True:  
+        while True:
+            flag = False
             for voterName in list(self.heartbeats):
                 if time.time() - self.heartbeats[voterName] > self.heartbeatTime * 2:
                     self.heartbeats.pop(voterName, None)
                     self.voters.pop(voterName, None)
                     print(f"{voterName}: Não está respondendo.")
-                    self.promoteObserver()
+                    flag = True
+                    if len(self.voters) + 1 <= 2:
+                        self.promoteObserver()
+            if(flag):
+                threading.Thread(target=self.infoUpdateVoter).start()
             time.sleep(self.heartbeatTime)
 
     #recebe a mensagem de heartbeat dos votantes
@@ -154,12 +198,16 @@ class Broker:
             self.heartbeats[newVoterName] = time.time()
 
             print(f"Observador promovido a votante: {newVoterName}")
-            newVoter.observerToVoter(newVoterName,self.logs)
+            newVoter.observerToVoter(newVoterName,self.uncommittedLogs)
+            threading.Thread(target=self.infoUpdateVoter).start()
     
 
     def observerToVoter(self, newVoterName, logs):
         self.mode = 2
-        self.logs = logs
+        self.uncommittedLogs = self.leader.getUncommittedLogs(-1)
+        print(f"Logs não commitados carregados: {self.uncommittedLogs}")
+        self.committedLogs = self.leader.getCommittedLogs(-1)
+        print(f"Logs commitados carregados: {self.committedLogs}")
         threading.Thread(target=self.heartbeat, daemon=True).start()
         print(f"Observador promovido a {newVoterName}")
 
@@ -181,6 +229,7 @@ def startBroker(brokerName, mode):
             print(f"{brokerName} registrado como '{broker.getMode(mode)}'e conectado.")
             
             if mode == 2:
+                broker.infoUpdateVoter()
                 threading.Thread(target=broker.heartbeat, daemon=True).start()
         except Exception as e:
             print(f"Erro ao conectar ao líder: {e}")
