@@ -16,7 +16,7 @@ def main():
     print("Consumidor conectado ao líder. Aguardando dados confirmados...")
 
     while True:
-        committedLogs = brokerLeader.getLogsForConsume()
+        committedLogs = brokerLeader.getLogsForConsumer()
         print("Dados confirmados consumidos:")
         for entry in committedLogs:
             print(f" - {entry['msg']} (epoca: {entry['epoca']}, offset: {entry['offset']})")

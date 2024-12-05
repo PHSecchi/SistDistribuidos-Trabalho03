@@ -111,11 +111,11 @@ class Broker:
                 proxy.commitLog(newLog["offset"])
             return True
         else:
+            print(f"Falha ao atingir o número minimo de confirmações.")
             self.discardLog(newLog["offset"])
             voters = list(self.voters.values())
             for proxy in voters:
                 proxy.discardLog(newLog["offset"])
-            print(f"Falha ao atingir o número minimo de confirmações.")
             return False
 
     # Busca o log e envia confirmação para o lider
@@ -152,7 +152,7 @@ class Broker:
 
     #Gera logs commitados para envio para o consumidor
     def getLogsForConsumer(self):
-        committedLogs = [log for log in self.logs if log["committed"]]
+        committedLogs = self.committedLogs
         print(f"Enviando logs para consumidor: {committedLogs}")
         return committedLogs
 
@@ -178,6 +178,7 @@ class Broker:
                     flag = True
                     if len(self.voters) + 1 <= 2:
                         self.promoteObserver()
+                        flag = False
             if(flag):
                 threading.Thread(target=self.infoUpdateVoter).start()
             time.sleep(self.heartbeatTime)
@@ -193,20 +194,20 @@ class Broker:
     def promoteObserver(self):
         if self.observers:
             newVoter = self.observers.pop(0)
-            newVoterName = f"Votante{len(self.voters) + 1}"
+            newVoterName = "Observador"
             self.voters[newVoterName] = newVoter
             self.heartbeats[newVoterName] = time.time()
 
             print(f"Observador promovido a votante: {newVoterName}")
-            newVoter.observerToVoter(newVoterName,self.uncommittedLogs)
+            newVoter.observerToVoter(newVoterName)
             threading.Thread(target=self.infoUpdateVoter).start()
     
 
-    def observerToVoter(self, newVoterName, logs):
+    def observerToVoter(self, newVoterName):
         self.mode = 2
-        self.uncommittedLogs = self.leader.getUncommittedLogs(-1)
+        self.uncommittedLogs = self.leader.getUncommittedLogs(0)
         print(f"Logs não commitados carregados: {self.uncommittedLogs}")
-        self.committedLogs = self.leader.getCommittedLogs(-1)
+        self.committedLogs = self.leader.getCommittedLogs(0)
         print(f"Logs commitados carregados: {self.committedLogs}")
         threading.Thread(target=self.heartbeat, daemon=True).start()
         print(f"Observador promovido a {newVoterName}")
